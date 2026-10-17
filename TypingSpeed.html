@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed Typing Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .word-display {
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            margin: 25px 0;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            letter-spacing: 1px;
+            line-height: 1.6;
+            word-spacing: 8px;
+        }
+        textarea {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            box-sizing: border-box;
+            outline: none;
+            text-align: center;
+            margin-bottom: 20px;
+            resize: vertical;
+            min-height: 80px;
+            font-family: Arial, sans-serif;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #555;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #764ba2;
+        }
+        #message {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .hint {
+            color: #888;
+            font-size: 14px;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>⌨️ Speed Typing Test</h1>
+    <p style="color: #666;">Type all 10 words (in order, separated by spaces) as fast and accurately as you can!</p>
+    <div class="stats">
+        <div>Words: 10</div>
+        <div>Time: <span id="timer">0</span>s</div>
+    </div>
+    <div class="word-display" id="target-word">Click Start</div>
+    <p class="hint" id="hint" style="display:none;">Type the words exactly as shown, separated by single spaces</p>
+    <textarea id="user-input" placeholder="Type all 10 words here..." disabled autocomplete="off"></textarea>
+    <button id="action-btn" onclick="startGame()">Start Test</button>
+    <div id="message"></div>
+</div>
+<script>
+    const wordPool = [
+        "apple", "bridge", "coding", "device", "energy", 
+        "forest", "gadget", "habit", "island", "jungle", 
+        "kinetic", "laptop", "magnet", "nebula", "orbit", 
+        "planet", "quartz", "rocket", "signal", "transit"
+    ];
+    
+    let currentWords = [];
+    let targetString = "";
+    let startTime = null;
+    let timerInterval = null;
+    
+    const targetWordEl = document.getElementById("target-word");
+    const userInputEl = document.getElementById("user-input");
+    const timerEl = document.getElementById("timer");
+    const actionBtn = document.getElementById("action-btn");
+    const messageEl = document.getElementById("message");
+    const hintEl = document.getElementById("hint");
+
+    function shuffleArray(array) {
+        let arr = [...array];
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function startGame() {
+        // Pick 10 random words
+        currentWords = shuffleArray(wordPool).slice(0, 10);
+        targetString = currentWords.join(" ");
+        
+        messageEl.textContent = "";
+        userInputEl.value = "";
+        userInputEl.disabled = false;
+        userInputEl.focus();
+        actionBtn.style.display = "none";
+        hintEl.style.display = "block";
+        
+        // Show all 10 words at once
+        targetWordEl.textContent = targetString;
+        
+        startTime = new Date().getTime();
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            let elapsed = Math.floor((new Date().getTime() - startTime) / 1000);
+            timerEl.textContent = elapsed;
+        }, 1000);
+    }
+
+    userInputEl.addEventListener("input", () => {
+        // Normalize: trim and collapse multiple spaces
+        const typed = userInputEl.value.trim().replace(/\s+/g, " ");
+        
+        if (typed === targetString) {
+            endGame();
+        }
+    });
+
+    function endGame() {
+        clearInterval(timerInterval);
+        userInputEl.disabled = true;
+        hintEl.style.display = "none";
+        
+        let totalTime = ((new Date().getTime() - startTime) / 1000).toFixed(2);
+        let wpm = Math.round((10 / (totalTime / 60)));
+        
+        targetWordEl.textContent = "🎉 Done!";
+        messageEl.innerHTML = `<span style="color: #4caf50;">Time: ${totalTime}s | Speed: ${wpm} WPM</span>`;
+        
+        actionBtn.textContent = "Play Again";
+        actionBtn.style.display = "inline-block";
+    }
+</script>
+</body>
+</html>
