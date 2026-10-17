@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html><head><title>Lucky Wheel</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;min-height:100vh;text-align:center}
+canvas{display:block;margin:10px auto}
+.score{font-size:36px;font-weight:bold;margin:10px;text-shadow:0 0 15px rgba(255,255,255,0.3)}
+.score span{color:#514837}
+.btn{padding:15px 50px;border:none;border-radius:30px;font-size:20px;font-weight:bold;cursor:pointer;margin:10px;transition:.3s;background:linear-gradient(135deg,#ff6b6b,#ee5a24);color:#fff}
+.btn:hover{transform:scale(1.08)}
+.result{font-size:26px;margin:10px;min-height:36px;text-shadow:0 0 10px rgba(255,255,255,0.5)}
+.history{max-width:400px;margin:10px auto;font-size:14px;color:#aaa;text-align:left;max-height:120px;overflow-y:auto;padding:0 10px}
+.history div{padding:3px 0;border-bottom:1px solid #333}
+.vol{position:fixed;bottom:15px;right:15px;background:rgba(0,0,0,0.6);padding:10px 15px;border-radius:15px;font-size:13px;z-index:99}
+.vol button{background:#ff6b6b;color:#fff;border:none;padding:5px 12px;border-radius:10px;cursor:pointer;font-size:12px}
+.flash{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:38px;font-weight:bold;pointer-events:none;animation:flashOut 1.5s forwards;z-index:100}
+@keyframes flashOut{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(2)}}
+</style>
+</head><body>
+
+<div class="score">💰Score: <span id="scoreVal">0</span></div>
+<canvas id="wheel" width="400" height="400"></canvas>
+<button class="btn" onclick="spin()">🎡 SPIN! (cost $2)</button>
+<div class="result" id="res"></div>
+<div class="history" id="hist"></div>
+<div class="vol">🎵 <button onclick="toggleMute()" id="muteBtn">
+    🔇 Mute</button></div>
+
+<script>
+var vol=0.15, muted=false,rick=null,muteCount=0;
+var rickMsgs=["Never gonna give you up!","Never gonna let you down!"];
+function startMusic()
+{if(rick)return;
+    rick=new Audio('https://www.myinstants.com/en/instant/67-kid-47332/?utm_source=copy&utm_medium=share');
+    rick.loop=true;rick.volume=vol;rick.play().catch(function(){});}
+function toggleMute() {
+    muteCount++;
+    if (muteCount <= 2) {
+        flashMsg(rickMsgs[muteCount - 1], '#ff6b6b');
+        vol = Math.min(1, vol + 0.15);
+        if (rick) rick.volume = vol;
+    } else {
+        muted = !muted;
+        if (rick) rick.volume = muted ? 0 : vol;
+        document.getElementById('muteBtn').textContent = muted ? '🔊 Unmute' : '🔇 Mute';
+    }
+}
+function flashMsg(t,c){var d=document.createElement('div');
+d.className='flash';d.style.color=c||'#ff6b6b';
+d.textContent=t;document.body.appendChild(d);
+setTimeout(function(){d.remove()},1500);}
+
+var score=0,spins=0;
+function updScore(){document.getElementById('scoreVal').textContent=score;}
+
+var items=[
+    {label:'Jackpot! +20 💰',val:20,col:'#fdcb6e'},
+    {label:'Fortune +8 🌟',val:8,col:'#00b894'},
+    {label:'Lucky +5 🍀',val:5,col:'#00cec9'},
+    {label:'Nice +3 😄',val:3,col:'#0984e3'},
+    {label:'Small Win +1',val:1,col:'#74b9ff'},
+    {label:'you are zero 0',val:0,col:'#636e72'},
+    {label:'Meh -1 👀',val:-1,col:'#fd79a8'},
+    {label:'Oops -2 🤔',val:-2,col:'#e17055'},
+    {label:'Bad Luck -5 👻',val:-5,col:'#d63031'},
+    {label:'Cursed! -8',val:-8,col:'#6c5ce7'}
+];
+var cv=document.getElementById('wheel'),ctx=cv.getContext('2d');
+var angle=0,spinning=false;
+
+function drawWheel(){
+    var m=items.length,arc=Math.PI*2/m;
+    ctx.clearRect(0,0,400,400);ctx.save();ctx.translate(200,200);
+    ctx.rotate(angle);
+    for(var i=0;i<m;i++){
+        ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,180,i*arc,(i+1)*arc);
+        ctx.fillStyle=items[i].col;ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=2;ctx.stroke();
+        ctx.save();ctx.rotate(i*arc+arc/2);ctx.fillStyle='#fff';
+        ctx.font='bold 12px Arial';ctx.textAlign='center';
+        ctx.fillText(items[i].label,95,5);ctx.restore();
+    }
+    ctx.restore();
+    ctx.beginPath();ctx.moveTo(200,28);ctx.lineTo(190,8);
+    ctx.lineTo(210,8);ctx.fillStyle='#ff6b6b';ctx.fill();
+    ctx.beginPath();ctx.arc(200,200,22,0,7);ctx.fillStyle='#fff';ctx.fill();
+    ctx.fillStyle='#333';ctx.font='bold 12px Arial';
+    ctx.textAlign='center';ctx.fillText('SPIN',200,204);
+}
+
+function spin(){
+    if(spinning)return;startMusic();spinning=true;
+    score-=2;updScore();spins++;
+    document.getElementById('res').textContent='';
+    var speed=15+Math.random()*10,friction=0.1
+    function tick(){
+        angle+=speed*Math.PI/180;speed*=friction;drawWheel();
+        if(speed>0.3){requestAnimationFrame(tick);}
+        else{spinning=false;
+            var n=items.length,arc=360/n;
+            var deg=(((-angle*180/Math.PI)+270)%360+360)%360;
+            var idx=Math.floor(deg/arc),it=items[idx];
+            score+=it.val;updScore();
+            var sign=it.val>0?'+'+it.val:it.val===0?'+0':''+it.val;
+            document.getElementById('res').textContent=it.label+' ('+sign+')';
+            document.getElementById('res').style.color=it.val>=0?'#00b894':'#ff6b6b';
+            if(it.val>=8)flashMsg('+'+it.val+'! 🎉','#00b894');
+            if(it.val<=-5)flashMsg(it.val+'! 💀','#ff6b6b');
+            var h=document.getElementById('hist');
+            var row=document.createElement('div');
+            row.textContent='#'+spins+': '+it.label+
+            ' ('+sign+') → Total: $'+score;
+            h.insertBefore(row,h.firstChild);
+            vol=Math.min(1,vol+0.02);if(rick&&!muted)rick.volume=vol;
+        }
+    }
+    tick();
+}
+drawWheel();
+</script>
+</body></html>html>

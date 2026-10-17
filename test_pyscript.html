@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PyScript Test</title>
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <style>
+        body { font-family: Arial; padding: 50px; background: #f0f0f0; }
+        .box { background: white; padding: 30px; border-radius: 10px; max-width: 500px; margin: 0 auto; }
+        button { padding: 15px 30px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin: 10px; }
+        #output { margin-top: 20px; padding: 20px; background: #e3f2fd; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>PyScript Loading Test</h1>
+        <p>⏳ If you see a green message below, PyScript is working!</p>
+        <p>🕐 This usually takes <strong>10-30 seconds</strong> to load...</p>
+        
+        <button py-click="test_click()">Click Me (PyScript)</button>
+        <button onclick="jsTest()">Click Me (JavaScript)</button>
+        
+        <div id="output"></div>
+        
+        <div id="loading" style="color: orange; margin-top: 20px;">
+            ⏳ PyScript is loading... Please wait...
+        </div>
+    </div>
+
+    <py-script>
+        import datetime
+        
+        # This will run when PyScript loads
+        Element("loading").element.innerHTML = "✅ PyScript Loaded Successfully!"
+        Element("loading").element.style.color = "green"
+        
+        def test_click():
+            now = datetime.datetime.now().strftime("%H:%M:%S")
+            Element("output").element.innerHTML = f"<strong style='color: green;'>✅ PyScript works! Time: {now}</strong>"
+    </py-script>
+    
+    <script>
+        function jsTest() {
+            const now = new Date().toLocaleTimeString();
+            document.getElementById('output').innerHTML = "<strong style='color: blue;'>✅ JavaScript works! Time: " + now + "</strong>";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<meta charset="utf-8">
+<title>Cha Chaan Teng Defense (teaching version)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#1b1f27;color:#fff;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
+#info{font-size:20px;font-weight:bold;padding:10px}
+canvas{border-radius:10px;max-width:100vw;touch-action:none}
+#shop{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:10px}
+button{font:bold 16px system-ui,sans-serif;padding:10px 14px;border:0;border-radius:10px;background:#394056;color:#fff;cursor:pointer}
+button.on{background:#ff8a2a}
+</style>
+<div id="info"></div>
+<canvas id="cv" width="780" height="540"></canvas>
+<div id="shop">
+  <button data-k="cannon" class="on">🥤 Milk Tea Cannon $50</button>
+  <button data-k="ice">🍋 Lemon Tea Ice $60</button>
+  <button data-k="mortar">🍞 Pineapple Bun Mortar $90</button>
+  <button data-k="gatling">🍳 Egg Tart Gatling $110</button>
+  <button data-k="sniper">☕ Yuenyeung Sniper $130</button>
+  <button data-k="freezer">🧊 Condensed Milk Freezer $140</button>
+  <button data-k="blackhole">🌀 Black Hole Tower $300</button>
+  <button id="next">Next wave ▶</button>
+</div>
+<script>
+// ================= STEP 0: canvas and game data =================
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const TILE = 60, COLS = 13, ROWS = 9;          // map: 13 x 9 tiles, 60 px each
+let money = 150, lives = 20, wave = 0, state = 'play';
+
+// ================= STEP 1: the map and the road =================
+// The road is a list of corner points (in tiles). Enemies walk from the first point to the last.
+const WAY = [[-1, 1], [2, 1], [2, 6], [6, 6], [6, 2], [10, 2], [10, 6], [13, 6]];
+const path = WAY.map(([c, r]) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 }));   // tiles -> pixels
+// Remember which tiles are road (you can't build there)
+const road = new Set();
+for (let i = 1; i < WAY.length; i++) {
+  const [c0, r0] = WAY[i - 1], [c1, r1] = WAY[i];
+  for (let c = Math.min(c0, c1); c <= Math.max(c0, c1); c++)
+    for (let r = Math.min(r0, r1); r <= Math.max(r0, r1); r++) road.add(c + ',' + r);
+}
+function drawMap() {
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    ctx.fillStyle = road.has(c + ',' + r) ? '#a89c88' : (c + r) % 2 ? '#3d6a2e' : '#467636';
+    ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+  }
+  ctx.fillStyle = '#b3261e'; ctx.fillRect(COLS * TILE - 70, 5.5 * TILE - 10, 70, 80);      // the goal: the café
+  ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('CAFÉ', COLS * TILE - 35, 6 * TILE + 6);
+}
+
+// ================= STEP 2: enemies walk along the road =================
+const ETYPES = {
+  karen:      { hp: 60,  speed: 70,  reward: 6,  icon: '💁‍♀️' },
+  influencer: { hp: 34,  speed: 115, reward: 5,  icon: '📸' },
+  blogger:    { hp: 150, speed: 45,  reward: 11, icon: '📝' },
+  tourist:    { hp: 90,  speed: 50,  reward: 8,  icon: '🧳' },
+  critic:     { hp: 200, speed: 35,  reward: 15, icon: '🧐' },
+  kid:        { hp: 25,  speed: 140, reward: 4,  icon: '🏃‍♂️' },
+};
+let enemies = [];
+function spawn(kind) {
+  const E = ETYPES[kind], hp = E.hp * (1 + (wave - 1) * 0.3);           // 30% more HP every wave
+  enemies.push({ ...E, x: path[0].x, y: path[0].y, seg: 1, hp, max: hp, slow: 1 });
+}
+function moveEnemy(e, dt) {
+  const t = path[e.seg];                         // the next corner point
+  const dx = t.x - e.x, dy = t.y - e.y, d = Math.hypot(dx, dy);
+  const step = e.speed * e.slow * dt;            // distance this frame = speed x time
+  if (step >= d) {                               // reached the corner -> aim for the next one
+    e.x = t.x; e.y = t.y; e.seg++;
+    if (e.seg >= path.length) { e.gone = true; lives--; }     // reached the café: lose a life
+  } else {
+    e.x += dx / d * step; e.y += dy / d * step;   // one step towards the corner
+  }
+}
+function drawEnemy(e) {
+  ctx.font = '34px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.icon, e.x, e.y + 12);
+  ctx.fillStyle = '#300'; ctx.fillRect(e.x - 22, e.y - 30, 44, 6);                // health bar
+  ctx.fillStyle = '#3dff6a'; ctx.fillRect(e.x - 22, e.y - 30, 44 * e.hp / e.max, 6);
+}
+
+// ================= STEP 3: click a tile to build a tower =================
+const TOWERS = {
+  cannon:    { cost: 50,  range: 150, dmg: 14, rate: 0.6, color: '#c98a4b', icon: '🥤' },              // hits one enemy
+  ice:       { cost: 60,  range: 110, dps: 5,  slow: 0.5, color: '#f2d14a', icon: '🍋' },              // slows everyone nearby
+  mortar:    { cost: 90,  range: 210, dmg: 30, rate: 1.8, splash: 60, color: '#e8a33a', icon: '🍞' },  // explosion hits a group
+  gatling:   { cost: 110, range: 130, dmg: 7,  rate: 0.2, color: '#d9a05b', icon: '🍳' },              // super fast single target
+  sniper:    { cost: 130, range: 280, dmg: 65, rate: 2.2, color: '#7a4b28', icon: '☕' },              // long range high damage
+  freezer:   { cost: 140, range: 150, dps: 10, slow: 0.2, color: '#6ab0de', icon: '🧊' },              // heavy freeze aura
+  blackhole: { cost: 300, range: 300, dps: 999999999999999999999, slow: 0, color: '#000000', icon: '🕳️' },              // pulls & damages area
+};
+let towers = [], chosen = 'cannon';
+cv.addEventListener('pointerdown', (ev) => {
+  const box = cv.getBoundingClientRect();
+  const c = Math.floor((ev.clientX - box.left) / box.width * COLS);
+  const r = Math.floor((ev.clientY - box.top) / box.height * ROWS);
+  const old = towers.find((t) => t.c === c && t.r === r);
+  if (old) return upgrade(old);                             // click a tower = upgrade it
+  const T = TOWERS[chosen];
+  if (road.has(c + ',' + r) || money < T.cost) return;          // can't build on the road / not enough money
+  money -= T.cost;
+  towers.push({ ...T, kind: chosen, c, r, x: c * TILE + TILE / 2, y: r * TILE + TILE / 2, level: 1, cd: 0 });
+});
+function upgrade(t) {
+  const price = t.cost * t.level;                            // upgrade price = cost x level
+  if (t.level >= 3 || money < price) return;
+  money -= price; t.level++;
+  t.range *= 1.12;
+  if (t.dmg) t.dmg *= 1.6;
+  if (t.dps) t.dps *= 1.6;
+}
+function drawTower(t) {
+  if (t.kind === 'ice' || t.kind === 'freezer' || t.kind === 'blackhole') { 
+    ctx.fillStyle = t.kind === 'blackhole' ? 'rgba(72,61,139,.18)' : (t.kind === 'freezer' ? 'rgba(106,176,222,.15)' : 'rgba(255,242,117,.12)'); 
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.range, 0, 7); ctx.fill(); 
+  }
+  ctx.fillStyle = t.color; ctx.beginPath(); ctx.arc(t.x, t.y, 24, 0, 7); ctx.fill();
+  ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(t.icon, t.x, t.y + 10);
+  ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('★'.repeat(t.level), t.x, t.y + 34);
+}
+
+// ================= STEP 4: towers find enemies and shoot =================
+let bullets = [];
+function nearestInRange(t) {
+  let best = null, bestD = t.range;
+  for (const e of enemies) {
+    const d = Math.hypot(e.x - t.x, e.y - t.y);
+    if (d <= bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+function towerAct(t, dt) {
+  if (t.kind === 'ice' || t.kind === 'freezer') {               // area slow/aura effect
+    for (const e of enemies) if (Math.hypot(e.x - t.x, e.y - t.y) <= t.range) { e.slow = Math.min(e.slow, t.slow); hurt(e, t.dps * dt); }
+    return;
+  }
+  if (t.kind === 'blackhole') {                                 // black hole gravitational pull & damage aura
+    for (const e of enemies) {
+      const dist = Math.hypot(e.x - t.x, e.y - t.y);
+      if (dist <= t.range) {
+        e.slow = t.slow;
+        hurt(e, t.dps * dt);
+        // Pull enemy slightly toward the black hole center
+        e.x += (t.x - e.x) / dist * 15 * dt;
+        e.y += (t.y - e.y) / dist * 15 * dt;
+      }
+    }
+    return;
+  }
+  t.cd -= dt;                                                    // cooldown between shots
+  if (t.cd > 0) return;
+  const e = nearestInRange(t);
+  if (!e) return;
+  const bulletSpeed = t.kind === 'sniper' ? 700 : 400;
+  bullets.push({ x: t.x, y: t.y, target: e, tx: e.x, ty: e.y, dmg: t.dmg, splash: t.splash || 0, color: t.color, speed: bulletSpeed });
+  t.cd = t.rate;
+}
+function moveBullet(b, dt) {
+  if (!b.target.dead) { b.tx = b.target.x; b.ty = b.target.y; }   // follow the target (if it died, fly to its last spot)
+  const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy), step = b.speed * dt;
+  if (step < d) { b.x += dx / d * step; b.y += dy / d * step; return; }
+  b.hit = true;                                                  // it hit
+  if (b.splash) { for (const e of enemies) if (Math.hypot(e.x - b.tx, e.y - b.ty) <= b.splash) hurt(e, b.dmg); }
+  else hurt(b.target, b.dmg);
+}
+function hurt(e, amount) {
+  if (e.dead) return;
+  e.hp -= amount;
+  if (e.hp <= 0) { e.dead = true; money += e.reward; }          // killed: get paid
+}
+
+// ================= STEP 5: waves, win and lose =================
+// each wave = [enemy type, how many, seconds between them]
+const WAVES = [
+  [['karen', 8, 1.0]],                           
+  [['tourist', 8, 0.9], ['karen', 4, 0.9]],      
+  [['influencer', 10, 0.6], ['kid', 6, 0.5]],      
+  [['blogger', 4, 1.5], ['tourist', 8, 0.7]],         
+  [['critic', 2, 2.0], ['influencer', 12, 0.4]],       
+  [['kid', 15, 0.3], ['karen', 10, 0.6]],             
+  [['blogger', 8, 1.2], ['tourist', 12, 0.5]],         
+  [['critic', 5, 1.5], ['influencer', 15, 0.35]],         
+  [['blogger', 12, 0.8], ['critic', 4, 1.2], ['kid', 15, 0.3]],
+  [['critic', 8, 1.0], ['blogger', 14, 0.7], ['influencer', 20, 0.25], ['tourist', 15, 0.4]],
+  [['critic', 10, 1.0], ['blogger', 18, 0.7], ['influencer', 25, 0.25], ['tourist', 30, 0.4]], 
+  [['critic', 30, 1.0], ['blogger', 30, 0.7], ['influencer', 40, 0.25], ['tourist', 50, 0.4]], 
+];
+let queue = [], spawnT = 0;                                     // enemies waiting to walk in
+function nextWave() {
+  if (wave >= WAVES.length || queue.length || state !== 'play') return;
+  wave++;
+  for (const [kind, n, gap] of WAVES[wave - 1]) for (let i = 0; i < n; i++) queue.push({ kind, gap });
+}
+document.getElementById('next').onclick = nextWave;
+document.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => {
+  chosen = b.dataset.k;
+  document.querySelectorAll('[data-k]').forEach((x) => x.classList.toggle('on', x === b));
+});
+
+// ================= main loop: update -> draw =================
+function update(dt) {
+  if (state !== 'play') return;
+  if (queue.length && (spawnT -= dt) <= 0) { const q = queue.shift(); spawn(q.kind); spawnT = q.gap; }
+  for (const e of enemies) e.slow = 1;                          // reset every frame; ice towers slow them again
+  for (const t of towers) towerAct(t, dt);
+  for (const b of bullets) moveBullet(b, dt);
+  for (const e of enemies) moveEnemy(e, dt);
+  enemies = enemies.filter((e) => !e.dead && !e.gone);
+  bullets = bullets.filter((b) => !b.hit);
+  if (lives <= 0) state = 'lose';
+  else if (wave === WAVES.length && !queue.length && !enemies.length) state = 'win';
+}
+function draw() {
+  drawMap();
+  towers.forEach(drawTower);
+  enemies.forEach(drawEnemy);
+  for (const b of bullets) { ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, b.splash ? 9 : 6, 0, 7); ctx.fill(); }
+  document.getElementById('info').textContent = `💰 ${money}   ❤️ ${lives}   🌊 Wave ${wave}/${WAVES.length}`;
+  if (state !== 'play') {
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 60px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(state === 'win' ? 'YOU WIN! 🎉' : 'GAME OVER 😵', cv.width / 2, cv.height / 2);
+  }
+}
+let last = performance.now();
+function loop(now) {
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); last = now;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
