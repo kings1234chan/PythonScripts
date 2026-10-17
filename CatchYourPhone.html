@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Catch Your Phone!</title>
+    <!-- FontAwesome for UI Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background: #0f0c29;
+            background: radial-gradient(circle at center, #1f1c47 0%, #080619 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 100vh;
+            max-height: 700px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            border-radius: 16px;
+            overflow: hidden;
+            background: #14112e;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        /* Overlay Styling */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(13, 10, 36, 0.92);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 25px;
+            text-align: center;
+            z-index: 20;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .title {
+            font-size: 38px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a29bfe, #6c5ce7, #fd79a8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 2px 8px rgba(108, 92, 231, 0.4));
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #b2bec3;
+            margin-bottom: 20px;
+            line-height: 1.5;
+            max-width: 360px;
+        }
+
+        .highlight {
+            color: #f1c40f;
+            font-weight: bold;
+        }
+
+        .badge-box {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 12px 20px;
+            border-radius: 12px;
+            margin: 15px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffeaa7;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 100%;
+            max-width: 320px;
+            margin: 15px 0;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .stat-card .val {
+            font-size: 26px;
+            font-weight: bold;
+            color: #00cec9;
+        }
+
+        .stat-card .lbl {
+            font-size: 12px;
+            color: #a0a5b5;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn {
+            margin-top: 15px;
+            padding: 14px 45px;
+            font-size: 19px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 25px rgba(108, 92, 231, 0.5);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 12px 30px rgba(108, 92, 231, 0.7);
+        }
+
+        .btn:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        /* Top HUD buttons */
+        .hud-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+
+        .hud-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <!-- Canvas Game Screen -->
+        <canvas id="c"></canvas>
+
+        <!-- Mute Button -->
+        <button id="mute-btn" class="hud-btn" onclick="toggleMute()" title="Toggle Sound">
+            <i class="fa-solid fa-volume-high" id="mute-icon"></i>
+        </button>
+
+        <!-- Start Overlay -->
+        <div id="start-ov" class="overlay">
+            <h1 class="title">Catch Your Phone!</h1>
+            <p class="subtitle">Your phone is slipping out of your hands! <b class="highlight">Tap / Click</b> it before it shatters on the hard floor!</p>
+            <p class="subtitle" style="font-size:14px; margin-bottom:10px;">Miss 3 times = 💀 Destroyed screen</p>
+            <button class="btn" onclick="startGame()">CATCH! 🤚</button>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="end-ov" class="overlay hidden">
+            <h1 class="title" style="background: linear-gradient(135deg, #ff7675, #d63031); -webkit-background-clip: text;">SHATTERED! 💥</h1>
+            <div id="rank-badge" class="badge-box">Rank: Butter Fingers 🧈</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="val" id="final-score">0</div>
+                    <div class="lbl">Catches</div>
+                </div>
+                <div class="stat-card">
+                    <div class="val" id="high-score">0</div>
+                    <div class="lbl">Best Score</div>
+                </div>
+            </div>
+            <button class="btn" onclick="startGame()">TRY AGAIN 🔄</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Setup Canvas ---
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = 500;
+        const H = 700;
+        canvas.width = W;
+        canvas.height = H;
+
+        // --- Web Audio Synthesizer ---
+        let audioCtx = null;
+        let isMuted = false;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const icon = document.getElementById('mute-icon');
+            icon.className = isMuted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+        }
+
+        function playCatchSound() {
+            if (isMuted) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.12);
+
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        }
+
+        function playFailSound() {
+            if (isMuted) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            // Glass shatter / noise crunch effect
+            const bufferSize = audioCtx.sampleRate * 0.25;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            noise.start();
+        }
+
+        function playGameOverSound() {
+            if (isMuted) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.5);
+
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        // --- Game State & Variables ---
+        let state = 'menu'; // 'menu', 'play', 'dead'
+        let score = 0;
+        let misses = 0;
+        const maxMiss = 3;
+        let baseSpeed = 3.5;
+        let shakeTimer = 0;
+        let particles = [];
+        let floatTexts = [];
+        let touchRipples = [];
+
+        let highScore = parseInt(localStorage.getItem('catch_phone_high_score') || '0');
+
+        const catchMsgs = ['Nice catch! 🤚', 'SAVED! ⚡', 'Phew! 😮‍💨', 'Pro Reflexes! 🎯', 'Clutch! 🔥'];
+        const missMsgs = ['CRACK! 💥', 'Noooooo! 😱', 'RIP Screen! 📱', 'That\'s $500 gone! 💸', 'Butterfingers! 🧈'];
+
+        const phone = {
+            x: W / 2,
+            y: -120,
+            w: 60,
+            h: 110,
+            vx: 0,
+            vy: 0,
+            rot: 0,
+            rotSpd: 0,
+            caught: false,
+            landed: false
+        };
+
+        // --- Reset / Spawn Phone ---
+        function resetPhone() {
+            phone.x = 80 + Math.random() * (W - 160);
+            phone.y = -120;
+            // Speed scales with score
+            const currentSpeed = baseSpeed + Math.min(score * 0.25, 8);
+            phone.vy = currentSpeed + Math.random() * 1.5;
+            phone.vx = (Math.random() - 0.5) * (2 + Math.min(score * 0.1, 4));
+            phone.rot = (Math.random() - 0.5) * 0.5;
+            phone.rotSpd = (Math.random() - 0.5) * (0.05 + Math.min(score * 0.005, 0.08));
+            phone.caught = false;
+            phone.landed = false;
+        }
+
+        // --- Particle & FX Generators ---
+        function addFloatText(x, y, txt, color) {
+            floatTexts.push({ x: x, y: y, txt: txt, color: color || '#fff', life: 60, maxLife: 60 });
+        }
+
+        function createCatchBurst(x, y) {
+            for (let i = 0; i < 16; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 2 + Math.random() * 5;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(angle) * spd,
+                    vy: Math.sin(angle) * spd,
+                    radius: 3 + Math.random() * 3,
+                    color: ['#00cec9', '#74b9ff', '#a29bfe', '#ffeaa7'][Math.floor(Math.random() * 4)],
+                    life: 30, maxLife: 30
+                });
+            }
+        }
+
+        function createShatterBurst(x, y) {
+            for (let i = 0; i < 20; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 3 + Math.random() * 6;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(angle) * spd,
+                    vy: Math.sin(angle) * spd,
+                    radius: 2 + Math.random() * 4,
+                    color: ['#ff7675', '#d63031', '#ffffff', '#dfe6e9'][Math.floor(Math.random() * 4)],
+                    life: 40, maxLife: 40
+                });
+            }
+        }
+
+        function addTouchRipple(x, y) {
+            touchRipples.push({ x: x, y: y, r: 10, maxR: 40, alpha: 1 });
+        }
+
+        // --- Input Handling ---
+        function handleInput(e) {
+            if (state !== 'play') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const tapX = (clientX - rect.left) * scaleX;
+            const tapY = (clientY - rect.top) * scaleY;
+
+            addTouchRipple(tapX, tapY);
+
+            // Hit test for phone (with generous padding for better gameplay feeling)
+            if (!phone.caught && !phone.landed) {
+                const pad = 25;
+                const halfW = phone.w / 2 + pad;
+                const halfH = phone.h / 2 + pad;
+
+                if (tapX >= phone.x - halfW && tapX <= phone.x + halfW &&
+                    tapY >= phone.y - halfH && tapY <= phone.y + halfH) {
+                    
+                    // Successful catch!
+                    phone.caught = true;
+                    score++;
+                    playCatchSound();
+                    createCatchBurst(phone.x, phone.y);
+                    addFloatText(phone.x, phone.y - 30, catchMsgs[Math.floor(Math.random() * catchMsgs.length)], '#55efc4');
+
+                    setTimeout(resetPhone, 400);
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleInput(e);
+        }, { passive: false });
+
+        // --- Game Controls ---
+        function startGame() {
+            document.getElementById('start-ov').classList.add('hidden');
+            document.getElementById('end-ov').classList.add('hidden');
+            
+            initAudio();
+            state = 'play';
+            score = 0;
+            misses = 0;
+            particles = [];
+            floatTexts = [];
+            touchRipples = [];
+            shakeTimer = 0;
+
+            resetPhone();
+        }
+
+        function gameOver() {
+            state = 'dead';
+            playGameOverSound();
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('catch_phone_high_score', highScore.toString());
+            }
+
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('high-score').textContent = highScore;
+
+            // Determine Gamer Rank
+            let badge = "Butter Fingers 🧈";
+            if (score >= 25) badge = "Godlike Hands ⚡";
+            else if (score >= 18) badge = "Ninja Reflexes 🥷";
+            else if (score >= 12) badge = "Fast Thumbs 🚀";
+            else if (score >= 6) badge = "Quick Saver 🛡️";
+            else if (score >= 3) badge = "Noodle Wrist 🍜";
+
+            document.getElementById('rank-badge').textContent = `Rank: ${badge}`;
+            document.getElementById('end-ov').classList.remove('hidden');
+        }
+
+        // --- Update Loop ---
+        function update() {
+            if (state !== 'play') return;
+
+            // Phone movement physics
+            if (!phone.caught && !phone.landed) {
+                phone.y += phone.vy;
+                phone.x += phone.vx;
+                phone.rot += phone.rotSpd;
+                phone.vy += 0.12; // Gravity acceleration
+
+                // Trail Particles
+                if (Math.random() < 0.6) {
+                    particles.push({
+                        x: phone.x + (Math.random() - 0.5) * 20,
+                        y: phone.y,
+                        vx: 0, vy: -1,
+                        radius: 2 + Math.random() * 2,
+                        color: 'rgba(162, 155, 254, 0.4)',
+                        life: 15, maxLife: 15
+                    });
+                }
+
+                // Wall bounces
+                if (phone.x < 35) {
+                    phone.x = 35;
+                    phone.vx *= -0.7;
+                }
+                if (phone.x > W - 35) {
+                    phone.x = W - 35;
+                    phone.vx *= -0.7;
+                }
+
+                // Hit ground
+                if (phone.y > H - 80) {
+                    phone.landed = true;
+                    phone.y = H - 80;
+                    misses++;
+                    shakeTimer = 18;
+                    playFailSound();
+                    createShatterBurst(phone.x, phone.y);
+                    addFloatText(phone.x, H - 140, missMsgs[Math.floor(Math.random() * missMsgs.length)], '#ff7675');
+
+                    if (misses >= maxMiss) {
+                        setTimeout(gameOver, 900);
+                    } else {
+                        setTimeout(resetPhone, 800);
+                    }
+                }
+            }
+
+            // Caught transition motion
+            if (phone.caught) {
+                phone.vy *= 0.8;
+                phone.vx *= 0.8;
+                phone.rot *= 0.8;
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Update floating texts
+            for (let i = floatTexts.length - 1; i >= 0; i--) {
+                let ft = floatTexts[i];
+                ft.y -= 1.2;
+                ft.life--;
+                if (ft.life <= 0) floatTexts.splice(i, 1);
+            }
+
+            // Update touch ripples
+            for (let i = touchRipples.length - 1; i >= 0; i--) {
+                let r = touchRipples[i];
+                r.r += 2.5;
+                r.alpha -= 0.05;
+                if (r.alpha <= 0) touchRipples.splice(i, 1);
+            }
+
+            // Screen shake decay
+            if (shakeTimer > 0) shakeTimer--;
+        }
+
+        // --- Render Loop ---
+        function draw() {
+            ctx.save();
+
+            // Screen shake transform
+            if (shakeTimer > 0) {
+                const sx = (Math.random() - 0.5) * shakeTimer * 1.5;
+                const sy = (Math.random() - 0.5) * shakeTimer * 1.5;
+                ctx.translate(sx, sy);
+            }
+
+            // Background Gradient
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, H);
+            bgGradient.addColorStop(0, '#0f0c29');
+            bgGradient.addColorStop(0.5, '#201c47');
+            bgGradient.addColorStop(1, '#14112e');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, W, H);
+
+            // Floor & Shadow
+            ctx.fillStyle = '#0a081a';
+            ctx.fillRect(0, H - 60, W, 60);
+            ctx.fillStyle = '#6c5ce7';
+            ctx.fillRect(0, H - 62, W, 3);
+
+            // Draw Touch Ripples
+            for (let r of touchRipples) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(162, 155, 254, ${r.alpha})`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Draw Particles
+            for (let p of particles) {
+                ctx.save();
+                ctx.globalAlpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw Phone
+            drawPhone();
+
+            // Draw Cracks Overlay (Accumulates per miss)
+            if (misses > 0) drawCracks();
+
+            // Draw Floating Text Popups
+            for (let ft of floatTexts) {
+                ctx.save();
+                ctx.globalAlpha = ft.life / ft.maxLife;
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(ft.txt, ft.x, ft.y);
+                ctx.restore();
+            }
+
+            // Draw HUD Score & Lives
+            if (state === 'play') {
+                ctx.save();
+                // Catches Count
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('Catches: ' + score, 20, 42);
+
+                // Lives Indicator (Heart Icons)
+                ctx.textAlign = 'right';
+                let livesStr = '';
+                for (let i = 0; i < maxMiss; i++) {
+                    livesStr += (i < maxMiss - misses) ? '❤️ ' : '🖤 ';
+                }
+                ctx.font = '18px Arial';
+                ctx.fillText(livesStr, W - 70, 40);
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+
+        // --- Draw Phone Helper ---
+        function drawPhone() {
+            ctx.save();
+            ctx.translate(phone.x, phone.y);
+            ctx.rotate(phone.rot);
+
+            const pw = phone.w;
+            const ph = phone.h;
+            const r = 12; // Rounded corners radius
+
+            // Ground Shadow projection
+            if (phone.y < H - 80) {
+                const shadowDist = Math.min((H - 80 - phone.y) / H, 1);
+                ctx.save();
+                ctx.translate(0, (H - 80 - phone.y));
+                ctx.scale(1 - shadowDist * 0.3, 0.3);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.beginPath();
+                ctx.arc(0, 0, pw * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Phone Body Outer Shell
+            ctx.fillStyle = phone.caught ? '#2ecc71' : (phone.landed ? '#d63031' : '#2d3436');
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.moveTo(-pw / 2 + r, -ph / 2);
+            ctx.lineTo(pw / 2 - r, -ph / 2);
+            ctx.quadraticCurveTo(pw / 2, -ph / 2, pw / 2, -ph / 2 + r);
+            ctx.lineTo(pw / 2, ph / 2 - r);
+            ctx.quadraticCurveTo(pw / 2, ph / 2, pw / 2 - r, ph / 2);
+            ctx.lineTo(-pw / 2 + r, ph / 2);
+            ctx.quadraticCurveTo(-pw / 2, ph / 2, -pw / 2, ph / 2 - r);
+            ctx.lineTo(-pw / 2, -ph / 2 + r);
+            ctx.quadraticCurveTo(-pw / 2, -ph / 2, -pw / 2 + r, -ph / 2);
+            ctx.fill();
+
+            // Inner Screen Display
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = phone.caught ? '#a8e6cf' : (phone.landed ? '#ff7675' : '#0984e3');
+            ctx.fillRect(-pw / 2 + 4, -ph / 2 + 10, pw - 8, ph - 20);
+
+            // Screen Expression Emoji Face
+            ctx.font = '28px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            if (phone.landed) {
+                ctx.fillText('😱', 0, 0);
+            } else if (phone.caught) {
+                ctx.fillText('😊', 0, 0);
+            } else {
+                ctx.fillText('😰', 0, 0);
+            }
+
+            // Top Camera Notch
+            ctx.fillStyle = '#1e272e';
+            ctx.beginPath();
+            ctx.arc(0, -ph / 2 + 5, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // --- Screen Cracks Overlay ---
+        function drawCracks() {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 2;
+
+            const cracks = [
+                [[0, 0], [80, 120], [150, 90], [220, 180]],
+                [[W, 0], [W - 70, 100], [W - 150, 80], [W - 200, 200]],
+                [[0, H], [100, H - 100], [60, H - 200], [180, H - 250]],
+                [[W, H], [W - 90, H - 80], [W - 50, H - 180], [W - 160, H - 220]],
+                [[0, H / 2], [70, H / 2 + 30], [140, H / 2 - 20]]
+            ];
+
+            const count = Math.min(misses * 2, cracks.length);
+            for (let i = 0; i < count; i++) {
+                ctx.beginPath();
+                ctx.moveTo(cracks[i][0][0], cracks[i][0][1]);
+                for (let j = 1; j < cracks[i].length; j++) {
+                    ctx.lineTo(cracks[i][j][0], cracks[i][j][1]);
+                }
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // --- Main Animation Loop ---
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Start Loop on Page Load
+        loop();
+    </script>
+</body>
+</html>
