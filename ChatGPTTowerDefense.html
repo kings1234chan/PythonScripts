@@ -164,7 +164,7 @@
     }
     gold-=def.cost;
     const t={id:Math.random().toString(36).slice(2),type:selectedType,x:p.x,y:p.y,level:1,cooldown:0,spent:def.cost,angle:-Math.PI/2};
-    towers.push(t); selectTower(t); ('build-message').textContent=`{def.name} built. Ready for action!`; updateUI();
+    towers.push(t); selectTower(t); $('build-message').textContent=`${def.name} built. Ready for action!`; updateUI();
   }
   function selectTower(t) {
     selectedTower=t; $('selection-empty').style.display='none'; $('selected-info').classList.add('show');
@@ -226,7 +226,7 @@
     shots=shots.filter(s=>!s.dead);
   }
   function damageEnemy(e,amount){if(e.dead)return;e.hp-=amount;particles.push({x:e.x,y:e.y-12,life:.3,max:.3,text:Math.round(amount),color:'#fff2cc'});if(e.hp<=0){e.dead=true;gold+=e.reward;particles.push({x:e.x,y:e.y,life:.65,max:.65,text:`+${e.reward}g`,color:'#ffd166'});}}
-  function endGame(victory){gameOver=true;runningWave=false;won=victory;('wave-btn').disabled=true;('wave-btn').textContent=victory?'✓ Sector cleared':'✕ Game over';$('status').textContent=victory?'All waves cleared!':'The base has fallen. Restart to try again.';}
+  function endGame(victory){gameOver=true;runningWave=false;won=victory;$('wave-btn').disabled=true;$('wave-btn').textContent=victory?'✓ Sector cleared':'✕ Game over';$('status').textContent=victory?'All waves cleared!':'The base has fallen. Restart to try again.';}
 
   function update(dt) {
     if(paused||gameOver)return;
@@ -235,7 +235,7 @@
       const complete=spawnLeft===0&&enemies.every(e=>e.dead);
       const spawned=waveSize-spawnLeft;const killedOrLeaked=enemies.filter(e=>e.dead).length;
       $('wave-fill').style.width=(waveSize?Math.min(100,(killedOrLeaked/waveSize)*100):0)+'%';
-      if(complete){runningWave=false;if(wave>=15){endGame(true);}else{('wave-btn').disabled=false;('wave-btn').textContent=`▶ Start wave wave+1`;('status').textContent=`Wave ${wave} cleared. Build or upgrade, then continue.`;gold+=20+wave*2;particles.push({x:W/2,y:30,life:1,max:1,text:`WAVE CLEAR  +${20+wave*2}g`,color:'#52e0d0'});}}
+      if(complete){runningWave=false;if(wave>=15){endGame(true);}else{$('wave-btn').disabled=false;$('wave-btn').textContent=`▶ Start wave ${wave+1}`;$('status').textContent=`Wave ${wave} cleared. Build or upgrade, then continue.`;gold+=20+wave*2;particles.push({x:W/2,y:30,life:1,max:1,text:`WAVE CLEAR  +${20+wave*2}g`,color:'#52e0d0'});}}
     }
     for(const e of enemies)if(!e.dead)moveEnemy(e,dt);
     fireTowers(dt);updateShots(dt);enemies=enemies.filter(e=>!e.dead || e.x>=W+10);
@@ -283,8 +283,8 @@
     if(gameOver){ctx.fillStyle='#07111ddd';ctx.fillRect(0,0,W,H);ctx.fillStyle=won?'#52e0d0':'#ff647c';ctx.font='800 34px system-ui';ctx.textAlign='center';ctx.fillText(won?'SECTOR CLEARED':'BASE OVERRUN',W/2,H/2-12);ctx.fillStyle='#eaf3ff';ctx.font='15px system-ui';ctx.fillText(won?`You survived all 15 waves with ${lives} lives.`:`You made it to wave ${wave}. Reinforce and try again!`,W/2,H/2+20);}
   }
   function updateUI(){
-    ('gold').textContent=gold;('lives').textContent=lives;$('wave').textContent=wave;
-    ('enemies-left').textContent=runningWave?`{enemies.filter(e=>!e.dead).length+spawnLeft} hostiles remaining`:gameOver?'Sector ended':'No active wave';
+    $('gold').textContent=gold;$('lives').textContent=lives;$('wave').textContent=wave;
+    $('enemies-left').textContent=runningWave?`${enemies.filter(e=>!e.dead).length+spawnLeft} hostiles remaining`:gameOver?'Sector ended':'No active wave';
     if(selectedTower&&towers.includes(selectedTower))selectTower(selectedTower);
     document.querySelectorAll('.tower-choice').forEach(b=>{const d=towerDefs[b.dataset.type];b.style.opacity=gold<d.cost?'.65':'1';});
   }
@@ -297,16 +297,14 @@
     if(selectedTower){clearSelection();}
     if(selectedType)placeTower(p);
   });
-  document.querySelectorAll('.tower-choice').forEach(b=>b.addEventListener('click',()=>{selectedType=b.dataset.type;document.querySelectorAll('.tower-choice').forEach(x=>x.classList.toggle('active',x===b));clearSelection();('build-message').textContent=`{towerDefs[selectedType].name} selected. Cost: ${towerDefs[selectedType].cost} gold.`;}));
+  document.querySelectorAll('.tower-choice').forEach(b=>b.addEventListener('click',()=>{selectedType=b.dataset.type;document.querySelectorAll('.tower-choice').forEach(x=>x.classList.toggle('active',x===b));clearSelection();$('build-message').textContent=`${towerDefs[selectedType].name} selected. Cost: ${towerDefs[selectedType].cost} gold.`;}));
   $('wave-btn').addEventListener('click',startWave);
   $('pause-btn').addEventListener('click',()=>{if(gameOver)return;paused=!paused;$('pause-btn').textContent=paused?'▶ Resume':'Ⅱ Pause';$('status').textContent=paused?'Game paused.':'';});
   $('speed-btn').addEventListener('click',()=>{speed=speed===1?2:speed===2?3:1;$('speed-btn').textContent=`⚡ ${speed}× Speed`;});
-  ('clear-btn').addEventListener('click',reset);('upgrade-btn').addEventListener('click',upgradeSelected);$('sell-btn').addEventListener('click',sellSelected);
+  $('clear-btn').addEventListener('click',reset);$('upgrade-btn').addEventListener('click',upgradeSelected);$('sell-btn').addEventListener('click',sellSelected);
   function frame(now){if(!lastTime)lastTime=now;const dt=(now-lastTime)/1000;lastTime=now;update(dt);draw();requestAnimationFrame(frame);}
   reset();requestAnimationFrame(frame);
 })();
 </script>
 </body>
 </html>
-
-
