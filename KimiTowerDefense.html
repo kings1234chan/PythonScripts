@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tower Defense</title>
+<style>
+  body { margin:0; background:#1a1a2e; color:#eee; font-family:'Segoe UI',Arial,sans-serif; display:flex; flex-direction:column; align-items:center; }
+  h1 { margin:10px 0 4px; letter-spacing:2px; color:#e94560; }
+  #hud { display:flex; gap:20px; align-items:center; margin-bottom:6px; font-size:14px; }
+  .stat { background:#16213e; padding:4px 12px; border-radius:6px; border:1px solid #0f3460; }
+  #toolbar { display:flex; gap:10px; margin-bottom:8px; }
+  .btn { background:#16213e; color:#eee; border:1px solid #0f3460; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
+  .btn:hover { background:#0f3460; }
+  .btn.sel { background:#e94560; border-color:#e94560; }
+  canvas { background:#0b1026; border:2px solid #0f3460; border-radius:8px; cursor:crosshair; }
+  #msg { margin-top:6px; font-size:13px; color:#ffb347; height:18px; }
+</style>
+<base target="_blank">
+</head>
+<body>
+<h1>🗼 TOWER DEFENSE</h1>
+<div id="hud">
+  <div class="stat">💰 Gold: <span id="gold">120</span></div>
+  <div class="stat">❤️ Lives: <span id="lives">20</span></div>
+  <div class="stat">🌊 Wave: <span id="wave">0</span></div>
+  <div class="stat">💀 Kills: <span id="kills">0</span></div>
+</div>
+<div id="toolbar">
+  <button class="btn" data-t="0">Archer (30g)</button>
+  <button class="btn" data-t="1">Cannon (60g)</button>
+  <button class="btn" data-t="2">Frost (50g)</button>
+  <button class="btn" data-t="3">Delete</button>
+  <button class="btn" id="waveBtn">▶ Start Wave</button>
+</div>
+<canvas id="c" width="720" height="480"></canvas>
+<div id="msg">Select a tower, then click a tile to build. Space = start wave.</div>
+
+<script>
+const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+const CELL = 40, COLS = 18, ROWS = 12;
+
+// Path waypoints (grid coords)
+const PATH = [[-1,2],[4,2],[4,8],[10,8],[10,3],[16,3],[18,3]];
+const pathCells = new Set();
+for (let i = 0; i < PATH.length - 1; i++) {
+  let [x1,y1] = PATH[i], [x2,y2] = PATH[i+1];
+  const dx = Math.sign(x2-x1), dy = Math.sign(y2-y1);
+  let x = x1, y = y1;
+  while (x !== x2 || y !== y2) {
+    if (x>=0 && x<COLS && y>=0 && y<ROWS) pathCells.add(x+','+y);
+    x += dx; y += dy;
+  }
+}
+pathCells.add('17,3');
+const pathPx = PATH.map(([x,y]) => [(x+0.5)*CELL, (y+0.5)*CELL]);
+
+const TOWERS = [
+  { name:'Archer', cost:30, range:120, dmg:10, rate:0.5, color:'#4caf50', bullet:'#8bc34a' },
+  { name:'Cannon', cost:60, range:110, dmg:30, rate:1.3, color:'#ff5722', splash:50 },
+  { name:'Frost',  cost:50, range:110, dmg:6,  rate:0.6, color:'#03a9f4', slow:0.45 },
+];
+
+let gold = 120, lives = 20, wave = 0, kills = 0;
+let towers = [], enemies = [], bullets = [], particles = [];
+let selected = null, spawnQueue = 0, spawnTimer = 0, waveActive = false;
+const msgEl = document.getElementById('msg');
+function msg(t){ msgEl.textContent = t; }
+function setStats(){ goldEl.textContent=gold; livesEl.textContent=lives; waveEl.textContent=wave; killsEl.textContent=kills; }
+const goldEl=document.getElementById('gold'), livesEl=document.getElementById('lives'),
+      waveEl=document.getElementById('wave'), killsEl=document.getElementById('kills');
+
+document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+  selected = +b.dataset.t === 3 ? 'delete' : +b.dataset.t;
+  document.querySelectorAll('[data-t]').forEach(x => x.classList.remove('sel'));
+  b.classList.add('sel');
+  msg(selected === 'delete' ? 'Click a tower to sell it (60% refund).' : 'Click a tile to build a '+TOWERS[selected].name+'.');
+});
+document.getElementById('waveBtn').onclick = startWave;
+window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); startWave(); } });
+
+function startWave(){
+  if (waveActive || lives <= 0) return;
+  wave++;
+  spawnQueue = 6 + wave * 3;
+  waveActive = true;
+  msg('Wave ' + wave + ' incoming!');
+  setStats();
+}
+
+cvs.addEventListener('click', e => {
+  const r = cvs.getBoundingClientRect();
+  const cx = Math.floor((e.clientX - r.left) / CELL), cy = Math.floor((e.clientY - r.top) / CELL);
+  if (selected === 'delete') {
+    const t = towers.find(t => t.cx === cx && t.cy === cy);
+    if (t) { towers.splice(towers.indexOf(t),1); gold += Math.floor(TOWERS[t.type].cost*0.6); msg('Sold for '+Math.floor(TOWERS[t.type].cost*0.6)+'g.'); }
+    setStats(); return;
+  }
+  if (selected === null) return;
+  const T = TOWERS[selected];
+  if (pathCells.has(cx+','+cy) || towers.some(t => t.cx===cx && t.cy===cy)) { msg("Can't build there!"); return; }
+  if (gold < T.cost) { msg('Not enough gold!'); return; }
+  gold -= T.cost;
+  towers.push({ cx, cy, type: selected, cd: 0 });
+  msg('Built '+T.name+'.');
+  setStats();
+});
+
+function spawnEnemy(){
+  const hp = 30 + wave * 14, spd = 40 + wave * 3 + Math.random()*15;
+  enemies.push({ x: pathPx[0][0], y: pathPx[0][1], hp, maxHp: hp, speed: spd, wp: 1,
+                 slowT: 0, slowF: 1, color: `hsl(${Math.random()*40+330},70%,55%)`, r: 10 });
+}
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min((now - last)/1000, 0.05); last = now;
+  if (waveActive) {
+    spawnTimer -= dt;
+    if (spawnQueue > 0 && spawnTimer <= 0) { spawnEnemy(); spawnQueue--; spawnTimer = Math.max(0.35, 1.1 - wave*0.05); }
+    if (spawnQueue === 0 && enemies.length === 0) { waveActive = false; msg('Wave ' + wave + ' cleared! +25g'); gold += 25; setStats(); }
+  }
+
+  // enemies move
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    const target = pathPx[e.wp];
+    if (!target) { enemies.splice(i,1); lives--; setStats(); if (lives <= 0) { msg('💀 GAME OVER! Press refresh to play again.'); waveActive=false; } continue; }
+    if (e.slowT > 0) e.slowT -= dt;
+    const sf = e.slowT > 0 ? e.slowF : 1;
+    const dx = target[0]-e.x, dy = target[1]-e.y, d = Math.hypot(dx,dy);
+    const mv = e.speed * sf * dt;
+    if (d <= mv) { e.x = target[0]; e.y = target[1]; e.wp++; }
+    else { e.x += dx/d*mv; e.y += dy/d*mv; }
+  }
+
+  // towers shoot
+  for (const t of towers) {
+    t.cd -= dt;
+    if (t.cd > 0) continue;
+    const T = TOWERS[t.type];
+    const tx = (t.cx+0.5)*CELL, ty = (t.cy+0.5)*CELL;
+    let best = null, bd = 1e9;
+    for (const e of enemies) {
+      const d = Math.hypot(e.x-tx, e.y-ty);
+      if (d < T.range && d < bd) { bd = d; best = e; }
+    }
+    if (best) {
+      t.cd = T.rate;
+      bullets.push({ x: tx, y: ty, target: best, speed: 300, dmg: T.dmg, splash: T.splash||0,
+                     slow: T.slow||0, color: T.bullet || T.color });
+    }
+  }
+
+  // bullets
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    if (!enemies.includes(b.target)) { bullets.splice(i,1); continue; }
+    const dx = b.target.x-b.x, dy = b.target.y-b.y, d = Math.hypot(dx,dy);
+    if (d < 12) {
+      if (b.splash) {
+        for (const e of enemies) if (Math.hypot(e.x-b.target.x, e.y-b.target.y) < b.splash) { e.hp -= b.dmg; boom(e.x, e.y, b.color); }
+      } else {
+        b.target.hp -= b.dmg;
+        if (b.slow) { b.target.slowT = 1.5; b.target.slowF = b.slow; }
+        boom(b.target.x, b.target.y, b.color);
+      }
+      bullets.splice(i,1);
+    } else {
+      b.x += dx/d*b.speed*dt; b.y += dy/d*b.speed*dt;
+    }
+  }
+
+  // deaths
+  for (let i = enemies.length-1; i >= 0; i--) {
+    if (enemies[i].hp <= 0) { gold += 6 + wave; kills++; setStats(); enemies.splice(i,1); }
+  }
+
+  // particles
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx*dt; p.y += p.vy*dt; p.life -= dt;
+    if (p.life <= 0) particles.splice(i,1);
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function boom(x, y, color){
+  for (let i = 0; i < 5; i++)
+    particles.push({ x, y, vx:(Math.random()-0.5)*80, vy:(Math.random()-0.5)*80, life:0.3, color });
+}
+
+function draw(){
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  for (let x = 0; x <= COLS; x++) { ctx.beginPath(); ctx.moveTo(x*CELL,0); ctx.lineTo(x*CELL,cvs.height); ctx.stroke(); }
+  for (let y = 0; y <= ROWS; y++) { ctx.beginPath(); ctx.moveTo(0,y*CELL); ctx.lineTo(cvs.width,y*CELL); ctx.stroke(); }
+  // path
+  ctx.fillStyle = '#2d3561';
+  for (const k of pathCells) { const [x,y] = k.split(',').map(Number); ctx.fillRect(x*CELL, y*CELL, CELL, CELL); }
+  // range preview when placing
+  // towers
+  for (const t of towers) {
+    const T = TOWERS[t.type], tx = (t.cx+0.5)*CELL, ty = (t.cy+0.5)*CELL;
+    ctx.fillStyle = T.color;
+    ctx.beginPath(); ctx.arc(tx, ty, 13, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(tx, ty, 5, 0, 7); ctx.fill();
+  }
+  // enemies
+  for (const e of enemies) {
+    ctx.fillStyle = e.slowT > 0 ? '#7fd4ff' : e.color;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 7); ctx.fill();
+    // hp bar
+    ctx.fillStyle = '#000'; ctx.fillRect(e.x-12, e.y-17, 24, 4);
+    ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x-12, e.y-17, 24*(e.hp/e.maxHp), 4);
+  }
+  // bullets
+  for (const b of bullets) {
+    ctx.fillStyle = b.color;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, 7); ctx.fill();
+  }
+  // particles
+  for (const p of particles) {
+    ctx.globalAlpha = p.life/0.3; ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // base
+  ctx.fillStyle = '#ffd700'; ctx.font = '16px Arial';
+  ctx.fillText('🏰', 17*CELL+2, 3*CELL+20);
+}
+
+cvs.addEventListener('mousemove', e => {
+  if (typeof selected !== 'number') return;
+  const r = cvs.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const T = TOWERS[selected];
+  ctx.save();
+  draw();
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath(); ctx.arc(mx, my, T.range, 0, 7); ctx.fill();
+  ctx.restore();
+});
+
+setStats();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
