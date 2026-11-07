@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Protocol: Two Stages</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Creepster&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #020202; color: #0ff;
+            font-family: 'Orbitron', sans-serif;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
+            background-image: linear-gradient(rgba(0, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        body::after {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2; pointer-events: none;
+        }
+
+        .loading-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Stage 1 Loading */
+        #loading-screen-1 { background-color: #000; }
+        #loading-title-1 {
+            font-size: 3rem; margin-bottom: 20px; letter-spacing: 4px;
+            color: #0ff; text-shadow: 0 0 10px #0ff, 0 0 20px #0ff; animation: glitch 1.5s infinite;
+        }
+        #loading-bar-container { width: 400px; height: 10px; background-color: #111; border: 1px solid #0ff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
+        #loading-progress { width: 0%; height: 100%; background-color: #0ff; box-shadow: 0 0 10px #0ff; transition: width 0.1s linear; }
+        #loading-text-1 { margin-top: 15px; font-size: 0.9rem; color: #0ff; letter-spacing: 2px; }
+
+        /* Stage 2 Loading */
+        #loading-screen-2 { background-color: #050505; display: none; opacity: 0; }
+        #loading-title-2 {
+            font-family: 'Creepster', cursive; font-size: 4rem; color: #550000;
+            text-shadow: 0 0 10px #f00; letter-spacing: 5px; animation: pulse 2s infinite;
+        }
+        #loading-text-2 { font-family: 'Share Tech Mono', monospace; color: #666; margin-top: 20px; }
+
+        /* UI Base */
+        #game-ui {
+            width: 800px; display: flex; justify-content: space-between;
+            padding: 15px 25px; box-sizing: border-box;
+            background: #050505; border: 1px solid #0ff; border-bottom: none;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.1); display: none; z-index: 1;
+        }
+
+        .inventory { display: flex; gap: 20px; align-items: center; font-size: 0.9rem; letter-spacing: 1px; }
+        
+        /* Stage 1 Icons */
+        .core-icon { width: 15px; height: 15px; border-radius: 50%; opacity: 0.2; border: 2px solid transparent; }
+        .core-icon.found { opacity: 1; box-shadow: 0 0 15px currentColor; border-color: #fff; }
+        
+        /* Stage 2 Icons */
+        #inventory-stage2 { display: none; font-family: 'Share Tech Mono', monospace; color: #aaa; }
+        .key-icon { width: 20px; height: 10px; border-radius: 2px; opacity: 0.2; }
+        .key-icon.found { opacity: 1; box-shadow: 0 0 10px currentColor; }
+
+        #status-msg { font-weight: bold; color: #f0f; text-shadow: 0 0 10px #f0f; letter-spacing: 2px; transition: color 0.3s; }
+
+        canvas {
+            background-color: #020202; border: 1px solid #0ff;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.1); display: none; z-index: 1; cursor: crosshair;
+        }
+
+        @keyframes glitch {
+            0% { text-shadow: 0 0 10px #0ff; } 95% { text-shadow: 0 0 10px #0ff; transform: translate(0, 0); }
+            96% { text-shadow: -2px 0 #f0f, 2px 0 #0ff; transform: translate(-2px, 2px); }
+            97% { text-shadow: -2px 0 #f0f, 2px 0 #0ff; transform: translate(2px, -2px); }
+            98% { text-shadow: 0 0 10px #0ff; transform: translate(0, 0); }
+        }
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; text-shadow: 0 0 20px #f00; } 100% { opacity: 0.8; } }
+    </style>
+</head>
+<body>
+
+    <!-- Stage 1 Loading -->
+    <div id="loading-screen-1" class="loading-screen">
+        <div id="loading-title-1">BLACKOUT_PROTOCOL</div>
+        <div id="loading-bar-container"><div id="loading-progress"></div></div>
+        <p id="loading-text-1">Generating Labyrinth...</p>
+    </div>
+
+    <!-- Stage 2 Loading -->
+    <div id="loading-screen-2" class="loading-screen">
+        <div id="loading-title-2">WARD 4</div>
+        <p id="loading-text-2">Restoring backup generator...</p>
+    </div>
+
+    <div id="game-ui">
+        <!-- Stage 1 Inv -->
+        <div class="inventory" id="inventory-stage1">
+            <span>DATA CORES:</span>
+            <div id="icon-magenta" class="core-icon" style="background-color: #f0f; color: #f0f;"></div>
+            <div id="icon-lime" class="core-icon" style="background-color: #0f0; color: #0f0;"></div>
+            <div id="icon-yellow" class="core-icon" style="background-color: #ff0; color: #ff0;"></div>
+        </div>
+        <!-- Stage 2 Inv -->
+        <div class="inventory" id="inventory-stage2">
+            <span>KEYCARDS:</span>
+            <div id="icon-red" class="key-icon" style="background-color: #d32f2f; color: #d32f2f;"></div>
+            <div id="icon-blue" class="key-icon" style="background-color: #1976d2; color: #1976d2;"></div>
+        </div>
+        <div id="status-msg">FIREWALL ACTIVE</div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const ui = document.getElementById('game-ui');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Global State
+        let currentStage = 1; 
+        let gameState = 'loading'; // loading, playing, hacking, final_hacking, puzzle_defib, puzzle_memory, escaped
+        let time = 0;
+        const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+        let mouseX = 0, mouseY = 0, mouseClicked = false;
+
+        // Player (Shared across stages)
+        const player = { 
+            x: 0, y: 0, w: 16, h: 16, speed: 4, vx: 0, vy: 0, color: '#0ff',
+            angle: 0, walkAnim: 0,
+            stage2Keys: { red: false, blue: false }
+        };
+
+        // ==========================================
+        // STAGE 1 VARIABLES (CYBER)
+        // ==========================================
+        const walls1 = [
+            { x: 0, y: 0, w: 800, h: 10 }, { x: 0, y: 590, w: 800, h: 10 },
+            { x: 0, y: 0, w: 10, h: 600 }, { x: 790, y: 0, w: 10, h: 600 },
+            { x: 80, y: 80, w: 10, h: 180 }, { x: 80, y: 80, w: 200, h: 10 },
+            { x: 80, y: 340, w: 10, h: 180 }, { x: 80, y: 510, w: 200, h: 10 },
+            { x: 160, y: 160, w: 150, h: 10 }, { x: 160, y: 160, w: 10, h: 100 },
+            { x: 310, y: 80, w: 10, h: 250 }, { x: 160, y: 340, w: 160, h: 10 },
+            { x: 160, y: 340, w: 10, h: 100 }, { x: 250, y: 420, w: 10, h: 100 },
+            { x: 400, y: 80, w: 200, h: 10 }, { x: 400, y: 80, w: 10, h: 150 },
+            { x: 480, y: 160, w: 120, h: 10 }, { x: 600, y: 80, w: 10, h: 250 },
+            { x: 400, y: 300, w: 150, h: 10 }, { x: 400, y: 300, w: 10, h: 150 },
+            { x: 480, y: 380, w: 130, h: 10 }, { x: 680, y: 80, w: 10, h: 440 },
+            { x: 330, y: 510, w: 280, h: 10 }, { x: 330, y: 420, w: 10, h: 90 },
+            { x: 350, y: 0, w: 10, h: 60 }, { x: 440, y: 0, w: 10, h: 60 }
+        ];
+        const firewall = { x: 360, y: 10, w: 80, h: 15, open: false };
+        const spawnPoints1 = [
+            { x: 30, y: 30 }, { x: 740, y: 30 }, { x: 30, y: 550 }, { x: 740, y: 550 },
+            { x: 220, y: 120 }, { x: 530, y: 120 }, { x: 220, y: 460 }, { x: 530, y: 460 }
+        ];
+        let cores = [];
+        let hackingCore = null, hackSlider = 0, hackDir = 1, hackSpeed = 0.035, hackError = false;
+        const finalHack = { completed: false, colors: ['#f0f', '#0f0', '#ff0', '#0ff'], leftNodes: [], rightNodes: [], connections: {}, dragging: null };
+
+        // ==========================================
+        // STAGE 2 VARIABLES (HOSPITAL)
+        // ==========================================
+        const walls2 = [
+            { x: 0, y: 0, w: 800, h: 20 }, { x: 0, y: 580, w: 800, h: 20 },
+            { x: 0, y: 0, w: 20, h: 600 }, { x: 780, y: 0, w: 20, h: 600 },
+            { x: 20, y: 150, w: 300, h: 20 }, { x: 480, y: 150, w: 300, h: 20 },
+            { x: 300, y: 150, w: 20, h: 300 }, { x: 480, y: 150, w: 20, h: 300 },
+            { x: 150, y: 300, w: 150, h: 20 },
+            { x: 300, y: 450, w: 70, h: 20 }, { x: 430, y: 450, w: 70, h: 20 }
+        ];
+        const props2 = [
+            { x: 50, y: 50, w: 30, h: 60 }, { x: 120, y: 50, w: 30, h: 60 },
+            { x: 190, y: 50, w: 30, h: 60 }, { x: 50, y: 350, w: 30, h: 60 }
+        ];
+        let doors2 = [
+            { x: 300, y: 220, w: 20, h: 60, color: '#d32f2f', reqKey: 'red', open: false },
+            { x: 480, y: 220, w: 20, h: 60, color: '#1976d2', reqKey: 'blue', open: false }
+        ];
+        const metalGate2 = { x: 370, y: 150, w: 60, h: 20, open: false };
+        const puzzles2 = [
+            { id: 'defib', x: 230, y: 40, w: 40, h: 30, color: '#444', solved: false },
+            { id: 'memory', x: 700, y: 200, w: 40, h: 30, color: '#444', solved: false }
+        ];
+        let droppedKeys2 = [];
+        const defib = { marker: 0, dir: 1, speed: 0.02, hits: 0, error: false };
+        const memory = {
+            sequence: [], playerSequence: [], state: 'idle', timer: 0, showIndex: -1, error: false,
+            rects: [
+                { id: 0, x: 250, y: 250, w: 140, h: 140, c: '#f00' }, { id: 1, x: 410, y: 250, w: 140, h: 140, c: '#0f0' },
+                { id: 2, x: 250, y: 410, w: 140, h: 140, c: '#00f' }, { id: 3, x: 410, y: 410, w: 140, h: 140, c: '#ff0' }
+            ]
+        };
+
+        // ==========================================
+        // INITIALIZATION LOGIC
+        // ==========================================
+        
+        // Start Stage 1 Loading
+        let loadProgress = 0;
+        const progressEl = document.getElementById('loading-progress');
+        const loadText1 = document.getElementById('loading-text-1');
+        const loadingTexts1 = ["Randomizing Node Locations...", "Encrypting Pathways...", "Activating Fog of War..."];
+        
+        const loadInterval = setInterval(() => {
+            loadProgress += Math.random() * 10;
+            if (loadProgress % 25 < 10) loadText1.innerText = loadingTexts1[Math.floor(Math.random() * loadingTexts1.length)];
+            if (loadProgress >= 100) {
+                loadProgress = 100; clearInterval(loadInterval);
+                loadText1.innerText = "SYSTEM READY"; loadText1.style.color = "#0f0";
+                setTimeout(initStage1, 800);
+            }
+            progressEl.style.width = loadProgress + '%';
+        }, 120);
+
+        function initStage1() {
+            document.getElementById('loading-screen-1').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('loading-screen-1').style.display = 'none';
+                ui.style.display = 'flex'; canvas.style.display = 'block';
+                
+                // Shuffle spawns
+                for (let i = spawnPoints1.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [spawnPoints1[i], spawnPoints1[j]] = [spawnPoints1[j], spawnPoints1[i]];
+                }
+                player.x = spawnPoints1[0].x; player.y = spawnPoints1[0].y;
+                cores = [
+                    { x: spawnPoints1[1].x, y: spawnPoints1[1].y, color: '#f0f', id: 'magenta', collected: false },
+                    { x: spawnPoints1[2].x, y: spawnPoints1[2].y, color: '#0f0', id: 'lime', collected: false },
+                    { x: spawnPoints1[3].x, y: spawnPoints1[3].y, color: '#ff0', id: 'yellow', collected: false }
+                ];
+                finalHack.leftNodes = finalHack.colors.map((c, i) => ({ id: i, color: c, x: 230, y: 220 + i * 55 }));
+                let shuffled = [...finalHack.colors].sort(() => Math.random() - 0.5);
+                finalHack.rightNodes = shuffled.map((c, i) => ({ id: i, color: c, x: 570, y: 220 + i * 55 }));
+
+                gameState = 'playing';
+                requestAnimationFrame(gameLoop);
+            }, 500);
+        }
+
+        function transitionToStage2() {
+            currentStage = 2;
+            gameState = 'loading';
+            
+            // UI Transition
+            const loadScreen2 = document.getElementById('loading-screen-2');
+            loadScreen2.style.display = 'flex';
+            setTimeout(() => { loadScreen2.style.opacity = 1; }, 50);
+            
+            ui.style.display = 'none';
+            canvas.style.display = 'none';
+            
+            // Swap UI Bars
+            document.getElementById('inventory-stage1').style.display = 'none';
+            document.getElementById('inventory-stage2').style.display = 'flex';
+            const statusMsg = document.getElementById('status-msg');
+            statusMsg.innerText = 'FIND A WAY OUT';
+            statusMsg.style.color = '#888'; statusMsg.style.textShadow = 'none';
+            ui.style.borderColor = '#333'; ui.style.fontFamily = "'Share Tech Mono', monospace";
+            canvas.style.borderColor = '#333';
+            
+            setTimeout(() => {
+                loadScreen2.style.opacity = 0;
+                setTimeout(() => {
+                    loadScreen2.style.display = 'none';
+                    ui.style.display = 'flex'; canvas.style.display = 'block';
+                    initStage2();
+                }, 500);
+            }, 2500);
+        }
+
+        function initStage2() {
+            player.x = 400; player.y = 520; player.color = '#889988'; player.speed = 3.5;
+            gameState = 'playing';
+        }
+
+        // ==========================================
+        // INPUTS & HELPERS
+        // ==========================================
+        function checkCollision(r1, r2) {
+            return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x && r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
+        }
+
+        function updateStatus(text, color) {
+            const st = document.getElementById('status-msg');
+            st.innerText = text; st.style.color = color;
+            if (currentStage === 1) st.style.textShadow = `0 0 10px ${color}`;
+        }
+
+        window.addEventListener('keydown', (e) => { 
+            if(keys.hasOwnProperty(e.key)) keys[e.key] = true; 
+            
+            if (e.code === 'Space') {
+                if (currentStage === 1 && gameState === 'hacking' && !hackError) {
+                    if (hackSlider >= 0.4 && hackSlider <= 0.6) {
+                        hackingCore.collected = true; document.getElementById(`icon-${hackingCore.id}`).classList.add('found');
+                        gameState = 'playing'; hackingCore = null;
+                    } else {
+                        hackError = true; setTimeout(() => { gameState = 'playing'; hackingCore = null; hackError = false; }, 800);
+                    }
+                }
+                if (currentStage === 2 && gameState === 'puzzle_defib' && !defib.error) {
+                    if (defib.marker > 0.45 && defib.marker < 0.55) {
+                        defib.hits++; defib.marker = 0;
+                        if (defib.hits >= 3) {
+                            gameState = 'playing'; puzzles2[0].solved = true;
+                            droppedKeys2.push({ color: 'red', x: puzzles2[0].x + 20, y: puzzles2[0].y + 20, w: 16, h: 10 });
+                            updateStatus("DEFIBRILLATOR ONLINE - RED KEY DISPENSED", "#0f0");
+                        }
+                    } else {
+                        defib.error = true; setTimeout(() => { gameState = 'playing'; defib.error = false; defib.hits = 0; }, 1000);
+                    }
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top;
+        });
+        canvas.addEventListener('mousedown', () => { 
+            mouseClicked = true; 
+            if (currentStage === 1 && gameState === 'final_hacking') {
+                for (let node of finalHack.leftNodes) {
+                    if (Math.hypot(mouseX - node.x, mouseY - node.y) < 20) {
+                        finalHack.dragging = { id: node.id, color: node.color, startX: node.x, startY: node.y };
+                        delete finalHack.connections[node.id]; break;
+                    }
+                }
+            }
+        });
+        canvas.addEventListener('mouseup', () => { 
+            mouseClicked = false; 
+            if (currentStage === 1 && gameState === 'final_hacking' && finalHack.dragging) {
+                for (let node of finalHack.rightNodes) {
+                    if (Math.hypot(mouseX - node.x, mouseY - node.y) < 20 && node.color === finalHack.dragging.color) {
+                        finalHack.connections[finalHack.dragging.id] = node.id; break;
+                    }
+                }
+                finalHack.dragging = null;
+                if (Object.keys(finalHack.connections).length === 4) {
+                    setTimeout(() => {
+                        finalHack.completed = true; firewall.open = true; gameState = 'playing';
+                        updateStatus("FIREWALL BREACHED - ESCAPE NORTH", "#0f0");
+                    }, 500);
+                }
+            }
+        });
+
+        // ==========================================
+        // UPDATE LOGIC
+        // ==========================================
+        function updatePlayerMovement() {
+            player.vx = 0; player.vy = 0;
+            if (keys.a || keys.ArrowLeft) player.vx = -player.speed;
+            if (keys.d || keys.ArrowRight) player.vx = player.speed;
+            if (keys.w || keys.ArrowUp) player.vy = -player.speed;
+            if (keys.s || keys.ArrowDown) player.vy = player.speed;
+
+            if (player.vx !== 0 || player.vy !== 0) {
+                player.angle = Math.atan2(player.vy, player.vx);
+                player.walkAnim += currentStage === 1 ? 0.3 : 0.25;
+            } else { player.walkAnim = 0; }
+        }
+
+        function updateStage1() {
+            if (gameState === 'hacking') {
+                if (!hackError) {
+                    hackSlider += hackDir * hackSpeed;
+                    if (hackSlider >= 1) { hackSlider = 1; hackDir = -1; }
+                    if (hackSlider <= 0) { hackSlider = 0; hackDir = 1; }
+                }
+                return;
+            }
+            if (gameState === 'final_hacking') return;
+            if (gameState !== 'playing') return;
+
+            updatePlayerMovement();
+
+            // Collisions
+            player.x += player.vx;
+            for (let wall of walls1) {
+                if (checkCollision(player, wall)) {
+                    if (player.vx > 0) player.x = wall.x - player.w; else if (player.vx < 0) player.x = wall.x + wall.w;
+                }
+            }
+            if (!firewall.open && checkCollision(player, firewall)) {
+                if (player.vx > 0) player.x = firewall.x - player.w; else if (player.vx < 0) player.x = firewall.x + firewall.w;
+            }
+
+            player.y += player.vy;
+            for (let wall of walls1) {
+                if (checkCollision(player, wall)) {
+                    if (player.vy > 0) player.y = wall.y - player.h; else if (player.vy < 0) player.y = wall.y + wall.h;
+                }
+            }
+
+            // Core triggers
+            for (let core of cores) {
+                if (!core.collected && checkCollision(player, { x: core.x-10, y: core.y-10, w: 20, h: 20 })) {
+                    gameState = 'hacking'; hackingCore = core; hackSlider = 0; hackDir = 1; hackError = false;
+                    const angle = Math.atan2((player.y+player.h/2) - core.y, (player.x+player.w/2) - core.x);
+                    player.x += Math.cos(angle) * 15; player.y += Math.sin(angle) * 15;
+                }
+            }
+
+            // Firewall Trigger
+            let collectedCount = cores.filter(c => c.collected).length;
+            if (!firewall.open && checkCollision(player, firewall)) {
+                if (player.vy > 0) player.y = firewall.y - player.h; else if (player.vy < 0) player.y = firewall.y + firewall.h;
+                if (collectedCount === 3 && !finalHack.completed) { gameState = 'final_hacking'; player.y += 10; }
+            }
+            if (collectedCount === 3 && !finalHack.completed && document.getElementById('status-msg').innerText !== "INTERFACE WITH FIREWALL") {
+                updateStatus("INTERFACE WITH FIREWALL", "#0ff");
+            }
+
+            // Escape Stage 1
+            if (firewall.open && player.y < firewall.y + firewall.h && player.x > firewall.x && player.x + player.w < firewall.x + firewall.w) {
+                if (player.y < 20) transitionToStage2();
+            }
+        }
+
+        function updateStage2() {
+            if (gameState === 'puzzle_defib') {
+                if (!defib.error) {
+                    defib.marker += defib.dir * defib.speed;
+                    if (defib.marker >= 1) { defib.marker = 1; defib.dir = -1; }
+                    if (defib.marker <= 0) { defib.marker = 0; defib.dir = 1; }
+                }
+                return;
+            }
+
+            if (gameState === 'puzzle_memory') {
+                if (memory.error) return;
+                if (memory.state === 'showing') {
+                    memory.timer += 0.05;
+                    if (memory.timer > 1) { 
+                        memory.timer = 0; memory.showIndex++;
+                        if (memory.showIndex >= memory.sequence.length) { memory.state = 'waiting'; memory.showIndex = -1; }
+                    }
+                } else if (memory.state === 'waiting' && mouseClicked) {
+                    mouseClicked = false;
+                    let clickedId = -1;
+                    for (let rect of memory.rects) {
+                        if (mouseX >= rect.x && mouseX <= rect.x + rect.w && mouseY >= rect.y && mouseY <= rect.y + rect.h) { clickedId = rect.id; break; }
+                    }
+                    if (clickedId !== -1) {
+                        memory.playerSequence.push(clickedId);
+                        memory.showIndex = clickedId; setTimeout(() => { memory.showIndex = -1; }, 200);
+                        const curr = memory.playerSequence.length - 1;
+                        if (memory.playerSequence[curr] !== memory.sequence[curr]) {
+                            memory.error = true; setTimeout(() => { gameState = 'playing'; }, 1000);
+                        } else if (memory.playerSequence.length === memory.sequence.length) {
+                            setTimeout(() => {
+                                gameState = 'playing'; puzzles2[1].solved = true;
+                                droppedKeys2.push({ color: 'blue', x: puzzles2[1].x - 30, y: puzzles2[1].y + 10, w: 16, h: 10 });
+                                updateStatus("SECURITY CLEARED - BLUE KEY DISPENSED", "#0f0");
+                            }, 500);
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (gameState !== 'playing') return;
+
+            updatePlayerMovement();
+            let obstacles = [...walls2, ...props2];
+            
+            // X Collisions
+            player.x += player.vx;
+            for (let obs of obstacles) {
+                if (checkCollision(player, obs)) {
+                    if (player.vx > 0) player.x = obs.x - player.w; else if (player.vx < 0) player.x = obs.x + obs.w;
+                }
+            }
+            for (let door of doors2) {
+                if (!door.open && checkCollision(player, door)) {
+                    if (player.stage2Keys[door.reqKey]) { door.open = true; updateStatus(`UNLOCKED WITH ${door.reqKey.toUpperCase()} KEYCARD`, "#0f0"); }
+                    else { if (player.vx > 0) player.x = door.x - player.w; else if (player.vx < 0) player.x = door.x + door.w; }
+                }
+            }
+            if (!metalGate2.open && checkCollision(player, metalGate2)) {
+                if (player.stage2Keys.red && player.stage2Keys.blue) { metalGate2.open = true; updateStatus("MAIN GATE OPEN - ESCAPE!", "#0f0"); }
+                else { if (player.vx > 0) player.x = metalGate2.x - player.w; else if (player.vx < 0) player.x = metalGate2.x + metalGate2.w; }
+            }
+
+            // Y Collisions
+            player.y += player.vy;
+            for (let obs of obstacles) {
+                if (checkCollision(player, obs)) {
+                    if (player.vy > 0) player.y = obs.y - player.h; else if (player.vy < 0) player.y = obs.y + obs.h;
+                }
+            }
+            for (let door of doors2) {
+                if (!door.open && checkCollision(player, door)) {
+                    if (player.stage2Keys[door.reqKey]) { door.open = true; updateStatus(`UNLOCKED WITH ${door.reqKey.toUpperCase()} KEYCARD`, "#0f0"); }
+                    else { if (player.vy > 0) player.y = door.y - player.h; else if (player.vy < 0) player.y = door.y + door.h; }
+                }
+            }
+            if (!metalGate2.open && checkCollision(player, metalGate2)) {
+                if (player.stage2Keys.red && player.stage2Keys.blue) { metalGate2.open = true; updateStatus("MAIN GATE OPEN - ESCAPE!", "#0f0"); }
+                else { if (player.vy > 0) player.y = metalGate2.y - player.h; else if (player.vy < 0) player.y = metalGate2.y + metalGate2.h; }
+            }
+
+            // Collect Keys
+            for (let i = droppedKeys2.length - 1; i >= 0; i--) {
+                let k = droppedKeys2[i];
+                if (checkCollision(player, k)) {
+                    player.stage2Keys[k.color] = true; document.getElementById(`icon-${k.color}`).classList.add('found');
+                    droppedKeys2.splice(i, 1); updateStatus(`ACQUIRED ${k.color.toUpperCase()} KEYCARD`, k.color === 'red' ? '#f55' : '#55f');
+                }
+            }
+
+            // Trigger Stage 2 Puzzles
+            for (let pz of puzzles2) {
+                if (!pz.solved && checkCollision(player, pz)) {
+                    const cx = player.x + player.w/2; const cy = player.y + player.h/2;
+                    const tx = pz.x + pz.w/2; const ty = pz.y + pz.h/2;
+                    const angle = Math.atan2(cy - ty, cx - tx);
+                    player.x += Math.cos(angle) * 20; player.y += Math.sin(angle) * 20;
+
+                    if (pz.id === 'defib') { gameState = 'puzzle_defib'; defib.hits = 0; defib.marker = 0; defib.error = false; }
+                    else if (pz.id === 'memory') {
+                        gameState = 'puzzle_memory';
+                        memory.sequence = []; memory.playerSequence = [];
+                        for(let i=0; i<4; i++) memory.sequence.push(Math.floor(Math.random() * 4));
+                        memory.state = 'showing'; memory.showIndex = 0; memory.timer = 0; memory.error = false;
+                    }
+                }
+            }
+
+            // Escape Stage 2
+            if (metalGate2.open && player.y < 120 && player.x > 360 && player.x < 430) {
+                gameState = 'escaped_total';
+            }
+        }
+
+        // ==========================================
+        // DRAWING LOGIC
+        // ==========================================
+        function drawPlayer(x, y, angle, walkAnim) {
+            ctx.save(); ctx.translate(x + player.w / 2, y + player.h / 2); ctx.rotate(angle);
+            const swing = Math.sin(walkAnim) * (currentStage === 1 ? 6 : 5); 
+            
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = currentStage === 1 ? 10 : 5; 
+            ctx.shadowColor = currentStage === 1 ? player.color : '#000';
+            
+            ctx.fillRect(-5, -8, 10, 16); 
+            ctx.beginPath(); ctx.arc(swing, -10, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-swing, 10, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-swing, -5, 3.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(swing, 5, 3.5, 0, Math.PI * 2); ctx.fill();
+            
+            ctx.fillStyle = currentStage === 1 ? player.color : '#ffccaa'; 
+            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+            
+            ctx.shadowBlur = 0; ctx.restore();
+        }
+
+        function drawStage1() {
+            // Environment
+            ctx.fillStyle = '#0a101d'; ctx.strokeStyle = '#055'; ctx.lineWidth = 1;
+            for (let wall of walls1) { ctx.fillRect(wall.x, wall.y, wall.w, wall.h); ctx.strokeRect(wall.x, wall.y, wall.w, wall.h); }
+
+            if (!firewall.open) {
+                ctx.fillStyle = `rgba(255, 0, 255, ${0.4 + Math.sin(time*5)*0.2})`; ctx.fillRect(firewall.x, firewall.y, firewall.w, firewall.h);
+                ctx.fillStyle = '#fff'; ctx.font = '10px Orbitron'; ctx.fillText(finalHack.completed ? "UNLOCKED" : "LOCKED", firewall.x + 10, firewall.y + 11);
+            } else {
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.2)'; ctx.fillRect(firewall.x, firewall.y, firewall.w, firewall.h);
+            }
+
+            for (let core of cores) {
+                if (!core.collected) {
+                    ctx.save(); ctx.translate(core.x, core.y + Math.sin(time * 3) * 3); ctx.fillStyle = core.color;
+                    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = core.color; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.lineDashOffset = -time * 10;
+                    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+                }
+            }
+            drawPlayer(player.x, player.y, player.angle, player.walkAnim);
+
+            // Darkness
+            if (gameState === 'playing' || gameState === 'hacking' || gameState === 'final_hacking') {
+                const darkCanvas = document.createElement('canvas'); darkCanvas.width = canvas.width; darkCanvas.height = canvas.height;
+                const darkCtx = darkCanvas.getContext('2d');
+                darkCtx.fillStyle = (gameState === 'playing') ? '#010101' : 'rgba(1, 1, 1, 0.7)'; 
+                darkCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+                if (gameState === 'playing') {
+                    darkCtx.globalCompositeOperation = 'destination-out';
+                    const pCenterX = player.x + player.w / 2, pCenterY = player.y + player.h / 2;
+                    const gradient = darkCtx.createRadialGradient(pCenterX, pCenterY, 30, pCenterX, pCenterY, 150);
+                    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)'); gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.8)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    darkCtx.fillStyle = gradient; darkCtx.beginPath(); darkCtx.arc(pCenterX, pCenterY, 150, 0, Math.PI * 2); darkCtx.fill();
+                }
+                ctx.drawImage(darkCanvas, 0, 0);
+            }
+
+            // Minigames
+            if (gameState === 'hacking' && hackingCore) {
+                ctx.fillStyle = 'rgba(0, 15, 15, 0.9)'; ctx.fillRect(200, 200, 400, 200);
+                ctx.strokeStyle = hackError ? '#f00' : hackingCore.color; ctx.lineWidth = 2; ctx.strokeRect(200, 200, 400, 200);
+                ctx.fillStyle = hackingCore.color; ctx.font = '22px Orbitron'; ctx.textAlign = 'center';
+                ctx.fillText(`OVERRIDE CORE: ${hackingCore.id.toUpperCase()}`, 400, 240);
+                
+                ctx.fillStyle = '#111'; ctx.fillRect(250, 280, 300, 24);
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.4)'; ctx.fillRect(250 + (300 * 0.4), 280, 300 * 0.2, 24);
+                ctx.fillStyle = hackError ? '#f00' : '#fff'; ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
+                ctx.fillRect(250 + (300 * hackSlider) - 4, 272, 8, 40); ctx.shadowBlur = 0;
+
+                ctx.fillStyle = hackError ? '#f00' : '#0ff'; ctx.font = '14px Orbitron';
+                ctx.fillText(hackError ? "ALIGNMENT FAILED" : "PRESS [SPACE] IN GREEN ZONE", 400, 350); ctx.textAlign = 'left';
+            }
+            if (gameState === 'final_hacking') {
+                ctx.fillStyle = 'rgba(0, 15, 15, 0.95)'; ctx.fillRect(150, 100, 500, 400);
+                ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2; ctx.strokeRect(150, 100, 500, 400);
+                ctx.fillStyle = '#0ff'; ctx.font = '24px Orbitron'; ctx.textAlign = 'center'; ctx.fillText("FIREWALL OVERRIDE", 400, 150); ctx.textAlign = 'left';
+                ctx.lineWidth = 8; ctx.lineCap = 'round';
+
+                for (let leftId in finalHack.connections) {
+                    const leftNode = finalHack.leftNodes.find(n => n.id == leftId);
+                    const rightNode = finalHack.rightNodes.find(n => n.id == finalHack.connections[leftId]);
+                    ctx.strokeStyle = leftNode.color; ctx.beginPath(); ctx.moveTo(leftNode.x, leftNode.y); ctx.lineTo(rightNode.x, rightNode.y); ctx.stroke();
+                }
+                if (finalHack.dragging) {
+                    ctx.strokeStyle = finalHack.dragging.color; ctx.beginPath(); ctx.moveTo(finalHack.dragging.startX, finalHack.dragging.startY); ctx.lineTo(mouseX, mouseY); ctx.stroke();
+                }
+                [...finalHack.leftNodes, ...finalHack.rightNodes].forEach(n => {
+                    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(n.x, n.y, 18, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(n.x, n.y, 10, 0, Math.PI*2); ctx.fill();
+                });
+            }
+        }
+
+        function drawStage2() {
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+            for(let i=0; i<800; i+=40) {
+                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,600); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(800,i); ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(50, 10, 10, 0.4)'; ctx.beginPath(); ctx.arc(280, 260, 30, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(420, 130, 20, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = '#3a3a3a'; ctx.strokeStyle = '#111';
+            for (let wall of walls2) { ctx.fillRect(wall.x, wall.y, wall.w, wall.h); ctx.strokeRect(wall.x, wall.y, wall.w, wall.h); }
+            for (let prop of props2) { ctx.fillStyle = '#ccc'; ctx.fillRect(prop.x, prop.y, prop.w, prop.h); ctx.fillStyle = '#555'; ctx.fillRect(prop.x+5, prop.y+5, prop.w-10, 15); }
+            for (let door of doors2) {
+                if (!door.open) {
+                    ctx.fillStyle = door.color; ctx.fillRect(door.x, door.y, door.w, door.h);
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(door.x+2, door.y+2, door.w-4, door.h-4);
+                }
+            }
+            if (!metalGate2.open) {
+                ctx.fillStyle = '#555'; ctx.fillRect(metalGate2.x, metalGate2.y, metalGate2.w, metalGate2.h);
+                ctx.fillStyle = '#222'; for(let i=5; i<metalGate2.w; i+=10) ctx.fillRect(metalGate2.x+i, metalGate2.y, 4, metalGate2.h);
+            }
+            for (let pz of puzzles2) {
+                ctx.fillStyle = pz.solved ? '#222' : pz.color; ctx.fillRect(pz.x, pz.y, pz.w, pz.h);
+                ctx.fillStyle = pz.solved ? '#151' : (Math.sin(time*10)>0 ? '#511' : '#f55'); ctx.fillRect(pz.x+5, pz.y+5, pz.w-10, pz.h-10);
+            }
+            for (let k of droppedKeys2) {
+                ctx.fillStyle = k.color === 'red' ? '#f33' : '#33f'; ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; ctx.fillRect(k.x, k.y, k.w, k.h); ctx.shadowBlur = 0;
+            }
+
+            drawPlayer(player.x, player.y, player.angle, player.walkAnim);
+
+            // Darkness Stage 2
+            if (gameState === 'playing' || gameState === 'puzzle_defib' || gameState === 'puzzle_memory') {
+                const darkCanvas = document.createElement('canvas'); darkCanvas.width = canvas.width; darkCanvas.height = canvas.height;
+                const darkCtx = darkCanvas.getContext('2d');
+                darkCtx.fillStyle = (gameState === 'playing') ? '#020202' : 'rgba(2, 2, 2, 0.8)'; darkCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+                if (gameState === 'playing') {
+                    darkCtx.globalCompositeOperation = 'destination-out';
+                    const pCenterX = player.x + player.w / 2, pCenterY = player.y + player.h / 2;
+                    const flicker = Math.random() * 10 - 5; const radius = 160 + flicker;
+                    const gradient = darkCtx.createRadialGradient(pCenterX, pCenterY, 40, pCenterX, pCenterY, radius);
+                    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)'); gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.7)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    darkCtx.fillStyle = gradient; darkCtx.beginPath(); darkCtx.arc(pCenterX, pCenterY, radius, 0, Math.PI * 2); darkCtx.fill();
+                }
+                ctx.drawImage(darkCanvas, 0, 0);
+            }
+
+            // Minigames
+            if (gameState === 'puzzle_defib') {
+                ctx.fillStyle = 'rgba(10, 30, 10, 0.95)'; ctx.fillRect(200, 200, 400, 200);
+                ctx.strokeStyle = defib.error ? '#f00' : '#0f0'; ctx.lineWidth = 4; ctx.strokeRect(200, 200, 400, 200);
+                ctx.fillStyle = '#0f0'; ctx.font = "20px 'Share Tech Mono'"; ctx.textAlign = 'center'; ctx.fillText(`CHARGE DEFIBRILLATOR [${defib.hits}/3]`, 400, 240);
+                ctx.fillStyle = '#111'; ctx.fillRect(250, 280, 300, 40);
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.3)'; ctx.fillRect(250 + (300 * 0.45), 280, 300 * 0.1, 40);
+                
+                const mX = 250 + (300 * defib.marker); ctx.strokeStyle = defib.error ? '#f00' : '#0f0'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(mX, 280); ctx.lineTo(mX-10, 300); ctx.lineTo(mX+10, 320); ctx.lineTo(mX, 320); ctx.stroke();
+
+                ctx.fillStyle = defib.error ? '#f00' : '#aaa'; ctx.fillText(defib.error ? "PATIENT FLATLINING" : "PRESS [SPACE] AT PEAK", 400, 360); ctx.textAlign = 'left';
+            }
+            if (gameState === 'puzzle_memory') {
+                ctx.fillStyle = 'rgba(10, 10, 30, 0.95)'; ctx.fillRect(150, 100, 500, 480);
+                ctx.strokeStyle = memory.error ? '#f00' : '#0ff'; ctx.lineWidth = 4; ctx.strokeRect(150, 100, 500, 480);
+                ctx.fillStyle = '#0ff'; ctx.font = "24px 'Share Tech Mono'"; ctx.textAlign = 'center'; ctx.fillText("SECURITY OVERRIDE PROTOCOL", 400, 150);
+                ctx.fillStyle = memory.error ? '#f00' : '#aaa'; ctx.fillText(memory.error ? "SEQUENCE REJECTED" : (memory.state === 'showing' ? "OBSERVE PATTERN" : "INPUT PATTERN"), 400, 190);
+                for (let rect of memory.rects) {
+                    ctx.fillStyle = rect.c;
+                    if ((memory.state === 'showing' && memory.sequence[Math.floor(memory.showIndex)] !== rect.id) || (memory.state === 'waiting' && memory.showIndex !== rect.id)) {
+                        ctx.globalAlpha = 0.2;
+                    } else { ctx.globalAlpha = 1.0; ctx.shadowBlur = 20; ctx.shadowColor = rect.c; }
+                    ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+                }
+                ctx.textAlign = 'left';
+            }
+
+            if (gameState === 'escaped_total') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff'; ctx.font = "50px 'Share Tech Mono'"; ctx.textAlign = 'center';
+                ctx.fillText("WARD CLEARED", canvas.width / 2, canvas.height / 2 - 20);
+                ctx.fillStyle = '#aaa'; ctx.font = "20px 'Share Tech Mono'"; ctx.fillText("You Escaped.", canvas.width / 2, canvas.height / 2 + 30);
+            }
+        }
+
+        function gameLoop() {
+            time += 0.05;
+            if (currentStage === 1) { updateStage1(); drawStage1(); } 
+            else if (currentStage === 2) { updateStage2(); drawStage2(); }
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
